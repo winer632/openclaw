@@ -36,7 +36,6 @@ import {
   isContextOverflowError,
   isFailoverAssistantError,
   isFailoverErrorMessage,
-  isOverloadedErrorMessage,
   parseImageSizeError,
   parseImageDimensionError,
   isRateLimitAssistantError,
