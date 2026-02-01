@@ -69,6 +69,20 @@ function scrubAnthropicRefusalMagic(prompt: string): string {
   );
 }
 
+// More precise HTTP 503 detection: requires both "503" and "service unavailable"/"overloaded"
+// This avoids triggering compaction on unrelated errors that happen to contain these words
+function isLikelyHttp503Error(errorText: string): boolean {
+  if (!errorText) {
+    return false;
+  }
+  const lower = errorText.toLowerCase();
+  // Must contain "503" AND either "service unavailable" or "overloaded" in context
+  const has503 = /\b503\b/.test(lower);
+  const hasServiceUnavailable = lower.includes("service unavailable");
+  const hasOverloaded = /overloaded/.test(lower);
+  return has503 && (hasServiceUnavailable || hasOverloaded);
+}
+
 export async function runEmbeddedPiAgent(
   params: RunEmbeddedPiAgentParams,
 ): Promise<EmbeddedPiRunResult> {
@@ -375,7 +389,8 @@ export async function runEmbeddedPiAgent(
 
             // Handle 503/overloaded errors that may indicate context window pressure
             // These errors can occur when context is near full capacity
-            if (!overflowCompactionAttempted && isOverloadedErrorMessage(errorText)) {
+            // Use isLikelyHttp503Error for more precise matching (503 + service unavailable/overloaded)
+            if (!overflowCompactionAttempted && isLikelyHttp503Error(errorText)) {
               log.warn(
                 `503/overloaded error detected; attempting auto-compaction for ${provider}/${modelId}`,
               );
@@ -401,7 +416,9 @@ export async function runEmbeddedPiAgent(
                 ownerNumbers: params.ownerNumbers,
               });
               if (compactResult.compacted) {
-                log.info(`auto-compaction succeeded after 503/overloaded for ${provider}/${modelId}; retrying prompt`);
+                log.info(
+                  `auto-compaction succeeded after 503/overloaded for ${provider}/${modelId}; retrying prompt`,
+                );
                 continue;
               }
               log.warn(
